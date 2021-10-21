@@ -9,11 +9,11 @@ import (
 
 func ExampleNewClient() {
 	// Prepare server mock.
-	sm, url := httpmock.NewServerMock()
+	sm, url := httpmock.NewServer()
 	defer sm.Close()
 
-	// This example shows Client and ServerMock working together for sake of portability.
-	// In real-world scenarios Client would complement real server or ServerMock would complement real HTTP client.
+	// This example shows Client and Server working together for sake of portability.
+	// In real-world scenarios Client would complement real server or Server would complement real HTTP client.
 
 	// Set successful expectation for first request out of concurrent batch.
 	exp := httpmock.Expectation{

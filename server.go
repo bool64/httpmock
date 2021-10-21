@@ -32,8 +32,8 @@ type Expectation struct {
 	Repeated int
 }
 
-// ServerMock serves predefined response for predefined request.
-type ServerMock struct {
+// Server serves predefined response for predefined request.
+type Server struct {
 	// OnError is called on expectations mismatch or internal errors.
 	OnError func(err error)
 
@@ -55,9 +55,9 @@ type ServerMock struct {
 	async        []Expectation
 }
 
-// NewServerMock creates mocked server.
-func NewServerMock() (*ServerMock, string) {
-	m := ServerMock{}
+// NewServer creates mocked server.
+func NewServer() (*Server, string) {
+	m := Server{}
 	m.server = httptest.NewServer(&m)
 	m.JSONComparer = assertjson.Comparer{IgnoreDiff: assertjson.IgnoreDiff}
 
@@ -65,7 +65,7 @@ func NewServerMock() (*ServerMock, string) {
 }
 
 // Expect adds expected operation.
-func (sm *ServerMock) Expect(e Expectation) {
+func (sm *Server) Expect(e Expectation) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -77,7 +77,7 @@ func (sm *ServerMock) Expect(e Expectation) {
 // Asynchronous expectations are checked for every incoming request,
 // first match is used for response.
 // If there are no matches, regular (sequential expectations are used).
-func (sm *ServerMock) ExpectAsync(e Expectation) {
+func (sm *Server) ExpectAsync(e Expectation) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -85,11 +85,11 @@ func (sm *ServerMock) ExpectAsync(e Expectation) {
 }
 
 // Close closes mocked server.
-func (sm *ServerMock) Close() {
+func (sm *Server) Close() {
 	sm.server.Close()
 }
 
-func (sm *ServerMock) prepareBody(data []byte) ([]byte, error) {
+func (sm *Server) prepareBody(data []byte) ([]byte, error) {
 	if sm.JSONComparer.Vars == nil {
 		return data, nil
 	}
@@ -110,7 +110,7 @@ func (sm *ServerMock) prepareBody(data []byte) ([]byte, error) {
 	return data, nil
 }
 
-func (sm *ServerMock) writeResponse(rw http.ResponseWriter, expectation Expectation) bool {
+func (sm *Server) writeResponse(rw http.ResponseWriter, expectation Expectation) bool {
 	var err error
 
 	if sm.DefaultResponseHeaders != nil {
@@ -141,7 +141,7 @@ func (sm *ServerMock) writeResponse(rw http.ResponseWriter, expectation Expectat
 	return !sm.checkFail(rw, err)
 }
 
-func (sm *ServerMock) checkAsync(rw http.ResponseWriter, req *http.Request) bool {
+func (sm *Server) checkAsync(rw http.ResponseWriter, req *http.Request) bool {
 	for i, expectation := range sm.async {
 		if err := sm.checkRequest(req, expectation); err != nil {
 			continue
@@ -175,7 +175,7 @@ func (sm *ServerMock) checkAsync(rw http.ResponseWriter, req *http.Request) bool
 }
 
 // ServeHTTP asserts request expectations and serves mocked response.
-func (sm *ServerMock) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (sm *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -226,7 +226,7 @@ func (sm *ServerMock) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	sm.expectations = sm.expectations[1:]
 }
 
-func (sm *ServerMock) checkBody(expected, received []byte) (err error) {
+func (sm *Server) checkBody(expected, received []byte) (err error) {
 	defer func() {
 		if err != nil && sm.OnBodyMismatch != nil {
 			sm.OnBodyMismatch(received)
@@ -252,7 +252,7 @@ func (sm *ServerMock) checkBody(expected, received []byte) (err error) {
 	return nil
 }
 
-func (sm *ServerMock) checkRequest(req *http.Request, expectation Expectation) error {
+func (sm *Server) checkRequest(req *http.Request, expectation Expectation) error {
 	if expectation.Method != "" && expectation.Method != req.Method {
 		return fmt.Errorf("method %q expected, %q received", expectation.Method, req.Method)
 	}
@@ -290,7 +290,7 @@ func (sm *ServerMock) checkRequest(req *http.Request, expectation Expectation) e
 	return sm.checkBody(expectation.RequestBody, reqBody)
 }
 
-func (sm *ServerMock) checkFail(rw http.ResponseWriter, err error) bool {
+func (sm *Server) checkFail(rw http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
 	}
@@ -316,7 +316,7 @@ func (sm *ServerMock) checkFail(rw http.ResponseWriter, err error) bool {
 }
 
 // ResetExpectations discards all expectation to reset the state of mock.
-func (sm *ServerMock) ResetExpectations() {
+func (sm *Server) ResetExpectations() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -326,7 +326,7 @@ func (sm *ServerMock) ResetExpectations() {
 
 // ExpectationsWereMet checks whether all queued expectations
 // were met in order. If any of them was not met - an error is returned.
-func (sm *ServerMock) ExpectationsWereMet() error {
+func (sm *Server) ExpectationsWereMet() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 

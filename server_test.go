@@ -61,9 +61,9 @@ func assertRoundTrip(t *testing.T, baseURL string, expectation httpmock.Expectat
 	}
 }
 
-func TestServerMock_ServeHTTP(t *testing.T) {
+func TestServer_ServeHTTP(t *testing.T) {
 	// Creating REST service mock.
-	mock, baseURL := httpmock.NewServerMock()
+	mock, baseURL := httpmock.NewServer()
 	defer mock.Close()
 
 	mock.OnBodyMismatch = func(received []byte) {
@@ -136,9 +136,9 @@ func TestServerMock_ServeHTTP(t *testing.T) {
 	})
 }
 
-func TestServerMock_ServeHTTP_error(t *testing.T) {
+func TestServer_ServeHTTP_error(t *testing.T) {
 	// Creating REST service mock.
-	mock, baseURL := httpmock.NewServerMock()
+	mock, baseURL := httpmock.NewServer()
 	defer mock.Close()
 
 	mock.OnBodyMismatch = func(received []byte) {
@@ -219,9 +219,9 @@ func TestServerMock_ServeHTTP_error(t *testing.T) {
 `, string(respBody))
 }
 
-func TestServerMock_ServeHTTP_concurrency(t *testing.T) {
+func TestServer_ServeHTTP_concurrency(t *testing.T) {
 	// Creating REST service mock.
-	mock, url := httpmock.NewServerMock()
+	mock, url := httpmock.NewServer()
 	defer mock.Close()
 
 	n := 50
@@ -263,9 +263,9 @@ func TestServerMock_ServeHTTP_concurrency(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestServerMock_ResetExpectations(t *testing.T) {
+func TestServer_ResetExpectations(t *testing.T) {
 	// Creating REST service mock.
-	mock, _ := httpmock.NewServerMock()
+	mock, _ := httpmock.NewServer()
 	defer mock.Close()
 
 	mock.Expect(httpmock.Expectation{
@@ -285,8 +285,8 @@ func TestServerMock_ResetExpectations(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestServerMock_vars(t *testing.T) {
-	sm, url := httpmock.NewServerMock()
+func TestServer_vars(t *testing.T) {
+	sm, url := httpmock.NewServer()
 	sm.JSONComparer.Vars = &shared.Vars{}
 	sm.Expect(httpmock.Expectation{
 		Method:       http.MethodGet,
@@ -309,8 +309,8 @@ func TestServerMock_vars(t *testing.T) {
 	assert.Equal(t, `{"bar":"foo","dynEcho":"abc"}`, string(body))
 }
 
-func TestServerMock_ExpectAsync(t *testing.T) {
-	sm, url := httpmock.NewServerMock()
+func TestServer_ExpectAsync(t *testing.T) {
+	sm, url := httpmock.NewServer()
 	sm.Expect(httpmock.Expectation{
 		Method:       http.MethodGet,
 		RequestURI:   "/",
