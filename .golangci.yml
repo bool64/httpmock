@@ -16,10 +16,13 @@ linters-settings:
     check-exported: false
   unparam:
     check-exported: true
+  cyclop:
+    max-complexity: 12 # TODO check if feasible to simplify
 
 linters:
   enable-all: true
   disable:
+    - goerr113 # TODO check issues
     - lll
     - maligned
     - gochecknoglobals
