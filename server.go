@@ -34,8 +34,11 @@ type Expectation struct {
 
 // Server serves predefined response for predefined request.
 type Server struct {
-	// OnError is called on expectations mismatch or internal errors.
+	// OnError is called on expectations mismatch or internal errors, optional.
 	OnError func(err error)
+
+	// OnRequest is called on before every request, optional.
+	OnRequest func(rw http.ResponseWriter, req *http.Request)
 
 	// ErrorResponder allows custom failure responses.
 	ErrorResponder func(rw http.ResponseWriter, err error)
@@ -178,6 +181,10 @@ func (sm *Server) checkAsync(rw http.ResponseWriter, req *http.Request) bool {
 func (sm *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
+
+	if sm.OnRequest != nil {
+		sm.OnRequest(rw, req)
+	}
 
 	if sm.checkAsync(rw, req) {
 		return
