@@ -32,6 +32,8 @@ type Client struct {
 	// Cookies are default cookies added to all requests, can be overridden by WithCookie.
 	Cookies map[string]string
 
+	ctx context.Context // nolint:containedctx // Context is configured separately.
+
 	resp     *http.Response
 	respBody []byte
 
@@ -43,6 +45,8 @@ type Client struct {
 
 	// reqConcurrency is a number of simultaneous requests to send.
 	reqConcurrency int
+
+	followRedirects bool
 
 	otherRespBody     []byte
 	otherResp         *http.Response
@@ -87,6 +91,8 @@ func (c *Client) SetBaseURL(baseURL string) {
 
 // Reset deletes client state.
 func (c *Client) Reset() *Client {
+	c.ctx = context.Background()
+
 	c.reqHeaders = map[string]string{}
 	c.reqCookies = map[string]string{}
 
@@ -98,9 +104,25 @@ func (c *Client) Reset() *Client {
 	c.reqBody = nil
 
 	c.reqConcurrency = 0
+	c.followRedirects = false
+
 	c.otherResp = nil
 	c.otherRespBody = nil
 	c.otherRespExpected = false
+
+	return c
+}
+
+// FollowRedirects enables automatic following of Location header.
+func (c *Client) FollowRedirects() *Client {
+	c.followRedirects = true
+
+	return c
+}
+
+// WithContext adds context to request.
+func (c *Client) WithContext(ctx context.Context) *Client {
+	c.ctx = ctx
 
 	return c
 }
@@ -282,7 +304,7 @@ func (c *Client) doOnce() (*http.Response, error) {
 		reqBody = bytes.NewBuffer(c.reqBody)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), c.reqMethod, c.baseURL+c.reqURI, reqBody)
+	req, err := http.NewRequestWithContext(c.ctx, c.reqMethod, c.baseURL+c.reqURI, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +345,40 @@ func (c *Client) doOnce() (*http.Response, error) {
 		tr = http.DefaultTransport
 	}
 
-	return tr.RoundTrip(req)
+	resp, err := tr.RoundTrip(req)
+
+	if err == nil && c.followRedirects {
+		resp, err = followRedirects(c.ctx, resp, tr)
+	}
+
+	return resp, err
+}
+
+func followRedirects(ctx context.Context, resp *http.Response, tr http.RoundTripper) (*http.Response, error) {
+	loc := resp.Header.Get("Location")
+	if loc != "" {
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			return nil, fmt.Errorf("failed to drain resp body: %w", err)
+		}
+
+		if err := resp.Body.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close resp body: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, loc, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create redirect request: %w", err)
+		}
+
+		resp, err := tr.RoundTrip(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to follow redirect: %w", err)
+		}
+
+		return followRedirects(ctx, resp, tr)
+	}
+
+	return resp, nil
 }
 
 // ExpectResponseStatus sets expected response status code.
