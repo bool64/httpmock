@@ -22,6 +22,7 @@ type Client struct {
 	ConcurrencyLevel int
 	JSONComparer     assertjson.Comparer
 	OnBodyMismatch   func(received []byte) // Optional, called when received body does not match expected.
+	Transport        http.RoundTripper
 
 	baseURL string
 
@@ -317,7 +318,12 @@ func (c *Client) doOnce() (*http.Response, error) {
 		req.AddCookie(&v)
 	}
 
-	return http.DefaultTransport.RoundTrip(req)
+	tr := c.Transport
+	if tr == nil {
+		tr = http.DefaultTransport
+	}
+
+	return tr.RoundTrip(req)
 }
 
 // ExpectResponseStatus sets expected response status code.
