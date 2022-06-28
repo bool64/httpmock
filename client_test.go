@@ -1,6 +1,7 @@
 package httpmock_test
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -103,4 +104,54 @@ func TestNewClient_failedExpectation(t *testing.T) {
 	c.WithURI("/")
 	assert.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
 		"unexpected body, expected: {\"foo\":\"bar}\", received: {\"bar\":\"foo\"}")
+}
+
+func TestNewClient_followRedirects(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.RequestURI == "/one" {
+			http.Redirect(writer, request, srv.URL+"/two", http.StatusFound)
+
+			return
+		}
+
+		if request.RequestURI == "/two" {
+			http.Redirect(writer, request, srv.URL+"/three", http.StatusMovedPermanently)
+
+			return
+		}
+
+		_, err := writer.Write([]byte(`{"bar":"foo"}`))
+		assert.NoError(t, err)
+	}))
+
+	defer srv.Close()
+
+	c := httpmock.NewClient(srv.URL)
+	c.FollowRedirects()
+
+	c.WithURI("/one")
+
+	assert.NoError(t, c.ExpectResponseStatus(http.StatusOK))
+	assert.NoError(t, c.ExpectResponseBody([]byte(`{"bar":"foo"}`)))
+}
+
+func TestNewClient_context(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, err := writer.Write([]byte(`{"bar":"foo"}`))
+		assert.NoError(t, err)
+	}))
+
+	defer srv.Close()
+
+	c := httpmock.NewClient(srv.URL)
+	c.FollowRedirects()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	c.WithURI("/one")
+	c.WithContext(ctx)
+
+	assert.EqualError(t, c.ExpectResponseStatus(http.StatusOK), context.Canceled.Error())
 }
