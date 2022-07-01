@@ -2,6 +2,7 @@ package httpmock_test
 
 import (
 	"context"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -153,5 +154,5 @@ func TestNewClient_context(t *testing.T) {
 	c.WithURI("/one")
 	c.WithContext(ctx)
 
-	assert.EqualError(t, c.ExpectResponseStatus(http.StatusOK), context.Canceled.Error())
+	assert.True(t, errors.Is(c.ExpectResponseStatus(http.StatusOK), context.Canceled))
 }
