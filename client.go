@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"sort"
 	"strings"
@@ -406,7 +407,9 @@ func (c *Client) doOnce() (*http.Response, error) {
 
 	if c.followRedirects {
 		cl := http.Client{}
+		j, _ := cookiejar.New(nil) // nolint:errcheck // Error is always nil.
 		cl.Transport = tr
+		cl.Jar = j
 
 		return cl.Do(req)
 	}
