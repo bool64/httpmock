@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -37,11 +38,13 @@ type Client struct {
 	resp     *http.Response
 	respBody []byte
 
-	reqHeaders map[string]string
-	reqCookies map[string]string
-	reqBody    []byte
-	reqMethod  string
-	reqURI     string
+	reqHeaders        map[string]string
+	reqCookies        map[string]string
+	reqQueryParams    url.Values
+	reqFormDataParams url.Values
+	reqBody           []byte
+	reqMethod         string
+	reqURI            string
 
 	// reqConcurrency is a number of simultaneous requests to send.
 	reqConcurrency int
@@ -95,6 +98,8 @@ func (c *Client) Reset() *Client {
 
 	c.reqHeaders = map[string]string{}
 	c.reqCookies = map[string]string{}
+	c.reqQueryParams = map[string][]string{}
+	c.reqFormDataParams = map[string][]string{}
 
 	c.resp = nil
 	c.respBody = nil
@@ -174,6 +179,20 @@ func (c *Client) WithHeader(key, value string) *Client {
 // WithCookie sets request cookie.
 func (c *Client) WithCookie(name, value string) *Client {
 	c.reqCookies[name] = value
+
+	return c
+}
+
+// WithQueryParam appends request query parameter.
+func (c *Client) WithQueryParam(name, value string) *Client {
+	c.reqQueryParams[name] = append(c.reqQueryParams[name], value)
+
+	return c
+}
+
+// WithURLEncodedFormDataParam appends request form data parameter.
+func (c *Client) WithURLEncodedFormDataParam(name, value string) *Client {
+	c.reqFormDataParams[name] = append(c.reqFormDataParams[name], value)
 
 	return c
 }
@@ -298,13 +317,53 @@ func (c *Client) checkResponses(
 	return nil
 }
 
-func (c *Client) doOnce() (*http.Response, error) {
-	var reqBody io.Reader
-	if len(c.reqBody) > 0 {
-		reqBody = bytes.NewBuffer(c.reqBody)
+func (c *Client) buildURI() (string, error) {
+	uri := c.baseURL + c.reqURI
+
+	if len(c.reqQueryParams) > 0 {
+		u, err := url.Parse(uri)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse requrst uri %s: %w", uri, err)
+		}
+
+		q := u.Query()
+		for k, v := range c.reqQueryParams {
+			q[k] = append(q[k], v...)
+		}
+
+		u.RawQuery = q.Encode()
+
+		uri = u.String()
 	}
 
-	req, err := http.NewRequestWithContext(c.ctx, c.reqMethod, c.baseURL+c.reqURI, reqBody)
+	return uri, nil
+}
+
+func (c *Client) buildBody() io.Reader {
+	if len(c.reqBody) > 0 {
+		return bytes.NewBuffer(c.reqBody)
+	} else if len(c.reqFormDataParams) > 0 {
+		if c.reqMethod == "" {
+			c.reqMethod = http.MethodPost
+		}
+
+		c.reqHeaders["Content-Type"] = "application/x-www-form-urlencoded"
+
+		return strings.NewReader(c.reqFormDataParams.Encode())
+	}
+
+	return nil
+}
+
+func (c *Client) doOnce() (*http.Response, error) {
+	uri, err := c.buildURI()
+	if err != nil {
+		return nil, err
+	}
+
+	body := c.buildBody()
+
+	req, err := http.NewRequestWithContext(c.ctx, c.reqMethod, uri, body)
 	if err != nil {
 		return nil, err
 	}
