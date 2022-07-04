@@ -156,3 +156,29 @@ func TestNewClient_context(t *testing.T) {
 
 	assert.True(t, errors.Is(c.ExpectResponseStatus(http.StatusOK), context.Canceled))
 }
+
+func TestNewClient_formData(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		assert.Equal(t, "/one?foo=bar&foo=baz&qux=quux", request.RequestURI)
+		assert.NoError(t, request.ParseForm())
+		assert.Equal(t, http.MethodPost, request.Method)
+		assert.Equal(t, "foo=bar&foo=baz&qux=quux", request.PostForm.Encode())
+
+		_, err := writer.Write([]byte(`{"bar":"foo"}`))
+		assert.NoError(t, err)
+	}))
+
+	defer srv.Close()
+
+	c := httpmock.NewClient(srv.URL)
+
+	c.WithURI("/one?foo=bar")
+	c.WithQueryParam("foo", "baz")
+	c.WithQueryParam("qux", "quux")
+	c.WithURLEncodedFormDataParam("foo", "bar")
+	c.WithURLEncodedFormDataParam("foo", "baz")
+	c.WithURLEncodedFormDataParam("qux", "quux")
+
+	assert.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
+		"unexpected body, expected: {\"foo\":\"bar}\", received: {\"bar\":\"foo\"}")
+}
