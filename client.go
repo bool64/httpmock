@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -34,7 +33,7 @@ type Client struct {
 	// Cookies are default cookies added to all requests, can be overridden by WithCookie.
 	Cookies map[string]string
 
-	ctx context.Context // nolint:containedctx // Context is configured separately.
+	ctx context.Context //nolint:containedctx // Context is configured separately.
 
 	resp     *http.Response
 	respBody []byte
@@ -231,7 +230,7 @@ func (c *Client) do() (err error) {
 				return
 			}
 
-			body, er := ioutil.ReadAll(resp.Body)
+			body, er := io.ReadAll(resp.Body)
 			if er != nil {
 				return
 			}
@@ -264,8 +263,8 @@ func (c *Client) do() (err error) {
 // CheckResponses checks if responses qualify idempotence criteria.
 //
 // Operation is considered idempotent in one of two cases:
-//  * all responses have same status code (e.g. GET /resource: all 200 OK),
-//  * all responses but one have same status code (e.g. POST /resource: one 200 OK, many 409 Conflict).
+//   - all responses have same status code (e.g. GET /resource: all 200 OK),
+//   - all responses but one have same status code (e.g. POST /resource: one 200 OK, many 409 Conflict).
 //
 // Any other case is considered an idempotence violation.
 func (c *Client) checkResponses(
@@ -348,27 +347,13 @@ func (c *Client) buildBody() io.Reader {
 			c.reqMethod = http.MethodPost
 		}
 
-		c.reqHeaders["Content-Type"] = "application/x-www-form-urlencoded"
-
 		return strings.NewReader(c.reqFormDataParams.Encode())
 	}
 
 	return nil
 }
 
-func (c *Client) doOnce() (*http.Response, error) {
-	uri, err := c.buildURI()
-	if err != nil {
-		return nil, err
-	}
-
-	body := c.buildBody()
-
-	req, err := http.NewRequestWithContext(c.ctx, c.reqMethod, uri, body)
-	if err != nil {
-		return nil, err
-	}
-
+func (c *Client) applyHeaders(req *http.Request) {
 	for k, v := range c.Headers {
 		req.Header.Set(k, v)
 	}
@@ -377,6 +362,12 @@ func (c *Client) doOnce() (*http.Response, error) {
 		req.Header.Set(k, v)
 	}
 
+	if len(c.reqFormDataParams) > 0 && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+}
+
+func (c *Client) applyCookies(req *http.Request) {
 	cookies := make([]http.Cookie, 0, len(c.Cookies)+len(c.reqCookies))
 
 	for n, v := range c.Cookies {
@@ -399,6 +390,23 @@ func (c *Client) doOnce() (*http.Response, error) {
 		v := v
 		req.AddCookie(&v)
 	}
+}
+
+func (c *Client) doOnce() (*http.Response, error) {
+	uri, err := c.buildURI()
+	if err != nil {
+		return nil, err
+	}
+
+	body := c.buildBody()
+
+	req, err := http.NewRequestWithContext(c.ctx, c.reqMethod, uri, body)
+	if err != nil {
+		return nil, err
+	}
+
+	c.applyHeaders(req)
+	c.applyCookies(req)
 
 	tr := c.Transport
 	if tr == nil {
@@ -407,7 +415,7 @@ func (c *Client) doOnce() (*http.Response, error) {
 
 	if c.followRedirects {
 		cl := http.Client{}
-		j, _ := cookiejar.New(nil) // nolint:errcheck // Error is always nil.
+		j, _ := cookiejar.New(nil) //nolint:errcheck // Error is always nil.
 		cl.Transport = tr
 		cl.Jar = j
 
@@ -604,7 +612,7 @@ func (c *Client) checkBody(expected, received []byte) (err error) {
 	}
 
 	if !bytes.Equal(expected, received) {
-		return fmt.Errorf("%w, expected: %s, received: %s",
+		return fmt.Errorf("%w, expected: %q, received: %q",
 			errUnexpectedBody, string(expected), string(received))
 	}
 

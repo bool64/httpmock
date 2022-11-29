@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -191,7 +191,7 @@ func (sm *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if len(sm.expectations) == 0 {
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		if err == nil && len(body) > 0 {
 			if sm.OnBodyMismatch != nil {
 				sm.OnBodyMismatch(body)
@@ -285,7 +285,7 @@ func (sm *Server) checkRequest(req *http.Request, expectation Expectation) error
 		}
 	}
 
-	reqBody, err := ioutil.ReadAll(req.Body)
+	reqBody, err := io.ReadAll(req.Body)
 	if err != nil {
 		return err
 	}

@@ -3,7 +3,7 @@ package httpmock_test
 import (
 	"context"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -18,7 +18,7 @@ func TestNewClient(t *testing.T) {
 	cnt := int64(0)
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/foo?q=1", r.URL.String())
-		b, err := ioutil.ReadAll(r.Body)
+		b, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		assert.Equal(t, `{"foo":"bar"}`, string(b))
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
@@ -104,7 +104,7 @@ func TestNewClient_failedExpectation(t *testing.T) {
 
 	c.WithURI("/")
 	assert.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
-		"unexpected body, expected: {\"foo\":\"bar}\", received: {\"bar\":\"foo\"}")
+		"unexpected body, expected: \"{\\\"foo\\\":\\\"bar}\\\"\", received: \"{\\\"bar\\\":\\\"foo\\\"}\"")
 }
 
 func TestNewClient_followRedirects(t *testing.T) {
@@ -180,5 +180,5 @@ func TestNewClient_formData(t *testing.T) {
 	c.WithURLEncodedFormDataParam("qux", "quux")
 
 	assert.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
-		"unexpected body, expected: {\"foo\":\"bar}\", received: {\"bar\":\"foo\"}")
+		"unexpected body, expected: \"{\\\"foo\\\":\\\"bar}\\\"\", received: \"{\\\"bar\\\":\\\"foo\\\"}\"")
 }
