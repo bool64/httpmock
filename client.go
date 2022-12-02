@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -230,7 +231,7 @@ func (c *Client) do() (err error) {
 				return
 			}
 
-			body, er := io.ReadAll(resp.Body)
+			body, er := ioutil.ReadAll(resp.Body)
 			if er != nil {
 				return
 			}
