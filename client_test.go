@@ -77,9 +77,21 @@ func TestNewClient(t *testing.T) {
 
 	assert.NoError(t, c.ExpectResponseStatus(http.StatusAccepted))
 	assert.NoError(t, c.ExpectResponseBody([]byte(`{"bar":"foo","dyn":"$var1"}`)))
+	assert.NoError(t, c.ExpectResponseBodyCallback(func(received []byte) error {
+		return c.JSONComparer.FailMismatch([]byte(`{"bar":"foo"}`), received)
+	}))
+	assert.Error(t, c.ExpectResponseBodyCallback(func(received []byte) error {
+		return c.JSONComparer.FailMismatch([]byte(`{"bar":"foo2"}`), received)
+	}))
 	assert.NoError(t, c.ExpectResponseHeader("Content-Type", "application/json"))
 	assert.NoError(t, c.ExpectOtherResponsesStatus(http.StatusConflict))
 	assert.NoError(t, c.ExpectOtherResponsesBody([]byte(`{"error":"conflict"}`)))
+	assert.NoError(t, c.ExpectOtherResponsesBodyCallback(func(received []byte) error {
+		return c.JSONComparer.FailMismatch([]byte(`{"error":"conflict"}`), received)
+	}))
+	assert.Error(t, c.ExpectOtherResponsesBodyCallback(func(received []byte) error {
+		return c.JSONComparer.FailMismatch([]byte(`{"error":"conflict2"}`), received)
+	}))
 	assert.NoError(t, c.ExpectOtherResponsesHeader("Content-Type", "application/json"))
 	assert.NoError(t, c.CheckUnexpectedOtherResponses())
 	assert.EqualError(t, c.ExpectNoOtherResponses(), "unexpected response status, expected: 202 (Accepted), received: 409 (Conflict)")

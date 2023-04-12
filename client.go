@@ -542,9 +542,45 @@ func (c *Client) assertResponseHeader(key, value string, resp *http.Response) er
 	return c.JSONComparer.FailNotEqual(expected, received)
 }
 
+// ExpectResponseBodyCallback sets expectation for response body to be received as JSON payload.
+//
+// In concurrent mode such response must be met only once or for all calls.
+func (c *Client) ExpectResponseBodyCallback(cb func(received []byte) error) error {
+	if c.resp == nil {
+		err := c.do()
+		if err != nil {
+			return err
+		}
+	}
+
+	return c.checkBody(nil, c.respBody, cb)
+}
+
+// ExpectOtherResponsesBodyCallback sets expectation for response body to be received one or more times during concurrent
+// calling.
+//
+// For example, it may describe "Not Found" response on multiple DELETE or "Conflict" response on multiple POST.
+// Does not affect single (non-concurrent) calls.
+func (c *Client) ExpectOtherResponsesBodyCallback(cb func(received []byte) error) error {
+	c.otherRespExpected = true
+
+	if c.resp == nil {
+		err := c.do()
+		if err != nil {
+			return err
+		}
+	}
+
+	if c.otherResp == nil {
+		return errNoOtherResponses
+	}
+
+	return c.checkBody(nil, c.otherRespBody, cb)
+}
+
 // ExpectResponseBody sets expectation for response body to be received.
 //
-// In concurrent mode such response mush be met only once or for all calls.
+// In concurrent mode such response must be met only once or for all calls.
 func (c *Client) ExpectResponseBody(body []byte) error {
 	if c.resp == nil {
 		err := c.do()
@@ -553,7 +589,7 @@ func (c *Client) ExpectResponseBody(body []byte) error {
 		}
 	}
 
-	return c.checkBody(body, c.respBody)
+	return c.checkBody(body, c.respBody, nil)
 }
 
 // ExpectOtherResponsesBody sets expectation for response body to be received one or more times during concurrent
@@ -575,12 +611,12 @@ func (c *Client) ExpectOtherResponsesBody(body []byte) error {
 		return errNoOtherResponses
 	}
 
-	return c.checkBody(body, c.otherRespBody)
+	return c.checkBody(body, c.otherRespBody, nil)
 }
 
-func (c *Client) checkBody(expected, received []byte) (err error) {
+func (c *Client) checkBody(expected, received []byte, cb func(received []byte) error) (err error) {
 	if len(received) == 0 {
-		if len(expected) == 0 {
+		if len(expected) == 0 && expected != nil {
 			return nil
 		}
 
@@ -593,28 +629,41 @@ func (c *Client) checkBody(expected, received []byte) (err error) {
 		}
 	}()
 
-	if json5.Valid(expected) && json5.Valid(received) {
-		expected, err := json5.Downgrade(expected)
-		if err != nil {
-			return err
-		}
+	if (expected == nil || json5.Valid(expected)) && json5.Valid(received) {
+		return c.checkJSONBody(expected, received, cb)
+	}
 
-		err = c.JSONComparer.FailNotEqual(expected, received)
-		if err != nil {
-			recCompact, cerr := assertjson.MarshalIndentCompact(json.RawMessage(received), "", " ", 100)
-			if cerr == nil {
-				received = recCompact
-			}
-
-			return fmt.Errorf("%w\nreceived:\n%s ", err, string(received))
-		}
-
-		return nil
+	if cb != nil {
+		return cb(received)
 	}
 
 	if !bytes.Equal(expected, received) {
 		return fmt.Errorf("%w, expected: %q, received: %q",
 			errUnexpectedBody, string(expected), string(received))
+	}
+
+	return nil
+}
+
+func (c *Client) checkJSONBody(expected, received []byte, cb func(received []byte) error) (err error) {
+	if cb != nil {
+		err = cb(received)
+	} else {
+		expected, err = json5.Downgrade(expected)
+		if err != nil {
+			return err
+		}
+
+		err = c.JSONComparer.FailNotEqual(expected, received)
+	}
+
+	if err != nil {
+		recCompact, cerr := assertjson.MarshalIndentCompact(json.RawMessage(received), "", " ", 100)
+		if cerr == nil {
+			received = recCompact
+		}
+
+		return fmt.Errorf("%w\nreceived:\n%s ", err, string(received))
 	}
 
 	return nil
