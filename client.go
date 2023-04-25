@@ -616,7 +616,7 @@ func (c *Client) ExpectOtherResponsesBody(body []byte) error {
 
 func (c *Client) checkBody(expected, received []byte, cb func(received []byte) error) (err error) {
 	if len(received) == 0 {
-		if len(expected) == 0 && expected != nil {
+		if len(expected) == 0 {
 			return nil
 		}
 
