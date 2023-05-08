@@ -119,6 +119,35 @@ func (c *Client) Reset() *Client {
 	return c
 }
 
+// Fork checks ctx for an existing clone of this Client.
+// If one is found, it is returned together with unmodified context.
+// Otherwise, a clone of Client is created and put into a new derived context,
+// then both new context and cloned Client are returned.
+//
+// This method enables context-driven concurrent access to shared base Client.
+func (c *Client) Fork(ctx context.Context) (context.Context, *Client) {
+	// Pointer to current Client is used as context key
+	// to enable multiple different clients in sam context.
+	if fc, ok := ctx.Value(c).(*Client); ok {
+		return ctx, fc
+	}
+
+	// Making a copy of this Client.
+	cc := *c
+	fc := &cc
+	fc.JSONComparer = c.JSONComparer
+
+	fc.Reset().WithContext(ctx)
+
+	if c.JSONComparer.Vars != nil {
+		ctx, fc.JSONComparer.Vars = c.JSONComparer.Vars.Fork(ctx)
+	}
+
+	ctx = context.WithValue(ctx, c, fc)
+
+	return ctx, fc
+}
+
 // FollowRedirects enables automatic following of Location header.
 func (c *Client) FollowRedirects() *Client {
 	c.followRedirects = true
