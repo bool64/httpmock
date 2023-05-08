@@ -227,10 +227,16 @@ func TestClient_Fork(t *testing.T) {
 		}()
 	}
 
-	select {
-	case <-time.After(10*time.Second):
-		assert.Fail(t, "could not wait for goroutines to finish")
-		case wg.Wait()
-	}
+	done := make(chan struct{})
 
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-time.After(10 * time.Second):
+		assert.Fail(t, "could not wait for goroutines to finish")
+	case <-done:
+	}
 }
