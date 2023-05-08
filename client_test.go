@@ -207,6 +207,7 @@ func TestClient_Fork(t *testing.T) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 
@@ -224,6 +225,16 @@ func TestClient_Fork(t *testing.T) {
 			ctx, fc2 := c2.Fork(ctx)
 			assert.NotNil(t, fc2)
 			fc2.WithMethod(http.MethodPost)
+
+			ctx1, fc1a := c1.Fork(ctx)
+			assert.Equal(t, fc1a, fc1)
+			assert.True(t, c1 != fc1)
+			assert.Equal(t, ctx, ctx1)
+
+			ctx2, fc2a := c2.Fork(ctx)
+			assert.Equal(t, fc2a, fc2)
+			assert.True(t, c2 != fc2)
+			assert.Equal(t, ctx, ctx2)
 		}()
 	}
 
