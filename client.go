@@ -136,14 +136,10 @@ func (c *Client) Fork(ctx context.Context) (context.Context, *Client) {
 	cc := *c
 	fc := &cc
 	fc.JSONComparer = c.JSONComparer
+	ctx, fc.JSONComparer.Vars = c.JSONComparer.Vars.Fork(ctx)
+	ctx = context.WithValue(ctx, c, fc)
 
 	fc.Reset().WithContext(ctx)
-
-	if c.JSONComparer.Vars != nil {
-		ctx, fc.JSONComparer.Vars = c.JSONComparer.Vars.Fork(ctx)
-	}
-
-	ctx = context.WithValue(ctx, c, fc)
 
 	return ctx, fc
 }
