@@ -251,3 +251,40 @@ func TestClient_Fork(t *testing.T) {
 	case <-done:
 	}
 }
+
+func TestClient_AllowRetries(t *testing.T) {
+	tries := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		tries++
+
+		if tries == 5 {
+			writer.WriteHeader(http.StatusOK)
+
+			return
+		}
+
+		writer.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := httpmock.NewClient(srv.URL)
+
+	c.WithMethod(http.MethodGet)
+	c.WithURI("/")
+
+	retriesLeft := 10
+
+	c.AllowRetries(httpmock.RetryBackOffFunc(func() time.Duration {
+		retriesLeft--
+
+		if retriesLeft <= 0 {
+			return -1
+		}
+
+		return time.Millisecond
+	}))
+
+	assert.NoError(t, c.ExpectResponseStatus(http.StatusOK))
+	assert.Equal(t, 5, tries)
+}

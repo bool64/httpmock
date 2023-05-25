@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/swaggest/assertjson"
 	"github.com/swaggest/assertjson/json5"
@@ -50,11 +51,40 @@ type Client struct {
 	// reqConcurrency is a number of simultaneous requests to send.
 	reqConcurrency int
 
+	retryBackOff    RetryBackOff
 	followRedirects bool
 
 	otherRespBody     []byte
 	otherResp         *http.Response
 	otherRespExpected bool
+}
+
+// RetryBackOff defines retry strategy.
+//
+// This interface matches github.com/cenkalti/retryBackOff/v4.BackOff.
+type RetryBackOff interface {
+	// NextBackOff returns the duration to wait before retrying the operation,
+	// or -1 to indicate that no more retries should be made.
+	//
+	// Example usage:
+	//
+	// 	duration := retryBackOff.NextBackOff();
+	// 	if (duration == retryBackOff.Stop) {
+	// 		// Do not retry operation.
+	// 	} else {
+	// 		// Sleep for duration and retry operation.
+	// 	}
+	//
+	NextBackOff() time.Duration
+}
+
+// RetryBackOffFunc implements RetryBackOff with a function.
+type RetryBackOffFunc func() time.Duration
+
+// NextBackOff returns the duration to wait before retrying the operation,
+// or -1 to indicate that no more retries should be made.
+func (r RetryBackOffFunc) NextBackOff() time.Duration {
+	return r()
 }
 
 var (
@@ -111,6 +141,7 @@ func (c *Client) Reset() *Client {
 
 	c.reqConcurrency = 0
 	c.followRedirects = false
+	c.retryBackOff = nil
 
 	c.otherResp = nil
 	c.otherRespBody = nil
@@ -147,6 +178,13 @@ func (c *Client) Fork(ctx context.Context) (context.Context, *Client) {
 // FollowRedirects enables automatic following of Location header.
 func (c *Client) FollowRedirects() *Client {
 	c.followRedirects = true
+
+	return c
+}
+
+// AllowRetries allows sending multiple requests until first response assertion passes.
+func (c *Client) AllowRetries(b RetryBackOff) *Client {
+	c.retryBackOff = b
 
 	return c
 }
@@ -284,6 +322,36 @@ func (c *Client) do() (err error) {
 	}
 
 	return c.checkResponses(statusCodeCount, bodies, resps)
+}
+
+func (c *Client) expectResp(check func() error) (err error) {
+	if c.resp != nil {
+		return check()
+	}
+
+	if c.retryBackOff != nil {
+		for {
+			if err = c.do(); err == nil {
+				if err = check(); err == nil {
+					return nil
+				}
+			}
+
+			dur := c.retryBackOff.NextBackOff()
+
+			if dur == -1 {
+				return err
+			}
+
+			time.Sleep(dur)
+		}
+	}
+
+	if err := c.do(); err != nil {
+		return err
+	}
+
+	return check()
 }
 
 // CheckResponses checks if responses qualify idempotence criteria.
@@ -453,26 +521,16 @@ func (c *Client) doOnce() (*http.Response, error) {
 
 // ExpectResponseStatus sets expected response status code.
 func (c *Client) ExpectResponseStatus(statusCode int) error {
-	if c.resp == nil {
-		err := c.do()
-		if err != nil {
-			return err
-		}
-	}
-
-	return c.assertResponseCode(statusCode, c.resp)
+	return c.expectResp(func() error {
+		return c.assertResponseCode(statusCode, c.resp)
+	})
 }
 
 // ExpectResponseHeader asserts expected response header value.
 func (c *Client) ExpectResponseHeader(key, value string) error {
-	if c.resp == nil {
-		err := c.do()
-		if err != nil {
-			return err
-		}
-	}
-
-	return c.assertResponseHeader(key, value, c.resp)
+	return c.expectResp(func() error {
+		return c.assertResponseHeader(key, value, c.resp)
+	})
 }
 
 // CheckUnexpectedOtherResponses fails if other responses were present, but not expected with
@@ -492,17 +550,13 @@ func (c *Client) CheckUnexpectedOtherResponses() error {
 //
 // Does not affect single (non-concurrent) calls.
 func (c *Client) ExpectNoOtherResponses() error {
-	if c.resp == nil {
-		if err := c.do(); err != nil {
-			return err
+	return c.expectResp(func() error {
+		if c.otherResp != nil {
+			return c.assertResponseCode(c.resp.StatusCode, c.otherResp)
 		}
-	}
 
-	if c.otherResp != nil {
-		return c.assertResponseCode(c.resp.StatusCode, c.otherResp)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // ExpectOtherResponsesStatus sets expectation for response status to be received one or more times during concurrent
@@ -513,17 +567,13 @@ func (c *Client) ExpectNoOtherResponses() error {
 func (c *Client) ExpectOtherResponsesStatus(statusCode int) error {
 	c.otherRespExpected = true
 
-	if c.resp == nil {
-		if err := c.do(); err != nil {
-			return err
+	return c.expectResp(func() error {
+		if c.otherResp == nil {
+			return errNoOtherResponses
 		}
-	}
 
-	if c.otherResp == nil {
-		return errNoOtherResponses
-	}
-
-	return c.assertResponseCode(statusCode, c.otherResp)
+		return c.assertResponseCode(statusCode, c.otherResp)
+	})
 }
 
 // ExpectOtherResponsesHeader sets expectation for response header value to be received one or more times during
@@ -531,17 +581,13 @@ func (c *Client) ExpectOtherResponsesStatus(statusCode int) error {
 func (c *Client) ExpectOtherResponsesHeader(key, value string) error {
 	c.otherRespExpected = true
 
-	if c.resp == nil {
-		if err := c.do(); err != nil {
-			return err
+	return c.expectResp(func() error {
+		if c.otherResp == nil {
+			return errNoOtherResponses
 		}
-	}
 
-	if c.otherResp == nil {
-		return errNoOtherResponses
-	}
-
-	return c.assertResponseHeader(key, value, c.otherResp)
+		return c.assertResponseHeader(key, value, c.otherResp)
+	})
 }
 
 func (c *Client) assertResponseCode(statusCode int, resp *http.Response) error {
@@ -571,14 +617,9 @@ func (c *Client) assertResponseHeader(key, value string, resp *http.Response) er
 //
 // In concurrent mode such response must be met only once or for all calls.
 func (c *Client) ExpectResponseBodyCallback(cb func(received []byte) error) error {
-	if c.resp == nil {
-		err := c.do()
-		if err != nil {
-			return err
-		}
-	}
-
-	return c.checkBody(nil, c.respBody, cb)
+	return c.expectResp(func() error {
+		return c.checkBody(nil, c.respBody, cb)
+	})
 }
 
 // ExpectOtherResponsesBodyCallback sets expectation for response body to be received one or more times during concurrent
@@ -589,32 +630,22 @@ func (c *Client) ExpectResponseBodyCallback(cb func(received []byte) error) erro
 func (c *Client) ExpectOtherResponsesBodyCallback(cb func(received []byte) error) error {
 	c.otherRespExpected = true
 
-	if c.resp == nil {
-		err := c.do()
-		if err != nil {
-			return err
+	return c.expectResp(func() error {
+		if c.otherResp == nil {
+			return errNoOtherResponses
 		}
-	}
 
-	if c.otherResp == nil {
-		return errNoOtherResponses
-	}
-
-	return c.checkBody(nil, c.otherRespBody, cb)
+		return c.checkBody(nil, c.otherRespBody, cb)
+	})
 }
 
 // ExpectResponseBody sets expectation for response body to be received.
 //
 // In concurrent mode such response must be met only once or for all calls.
 func (c *Client) ExpectResponseBody(body []byte) error {
-	if c.resp == nil {
-		err := c.do()
-		if err != nil {
-			return err
-		}
-	}
-
-	return c.checkBody(body, c.respBody, nil)
+	return c.expectResp(func() error {
+		return c.checkBody(body, c.respBody, nil)
+	})
 }
 
 // ExpectOtherResponsesBody sets expectation for response body to be received one or more times during concurrent
@@ -625,18 +656,13 @@ func (c *Client) ExpectResponseBody(body []byte) error {
 func (c *Client) ExpectOtherResponsesBody(body []byte) error {
 	c.otherRespExpected = true
 
-	if c.resp == nil {
-		err := c.do()
-		if err != nil {
-			return err
+	return c.expectResp(func() error {
+		if c.otherResp == nil {
+			return errNoOtherResponses
 		}
-	}
 
-	if c.otherResp == nil {
-		return errNoOtherResponses
-	}
-
-	return c.checkBody(body, c.otherRespBody, nil)
+		return c.checkBody(body, c.otherRespBody, nil)
+	})
 }
 
 func (c *Client) checkBody(expected, received []byte, cb func(received []byte) error) (err error) {
