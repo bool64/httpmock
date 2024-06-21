@@ -14,6 +14,7 @@ import (
 	"github.com/bool64/httpmock"
 	"github.com/bool64/shared"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewClient(t *testing.T) {
@@ -40,7 +41,9 @@ func TestNewClient(t *testing.T) {
 		assert.Equal(t, "bar", c.Value)
 
 		ncnt := atomic.AddInt64(&cnt, 1)
+
 		rw.Header().Set("Content-Type", "application/json")
+
 		if ncnt > 1 {
 			rw.WriteHeader(http.StatusConflict)
 			_, err := rw.Write([]byte(`{"error":"conflict"}`))
@@ -77,26 +80,26 @@ func TestNewClient(t *testing.T) {
 		WithURI("/foo?q=1").
 		Concurrently()
 
-	assert.NoError(t, c.ExpectResponseStatus(http.StatusAccepted))
-	assert.NoError(t, c.ExpectResponseBody([]byte(`{"bar":"foo","dyn":"$var1"}`)))
-	assert.NoError(t, c.ExpectResponseBodyCallback(func(received []byte) error {
+	require.NoError(t, c.ExpectResponseStatus(http.StatusAccepted))
+	require.NoError(t, c.ExpectResponseBody([]byte(`{"bar":"foo","dyn":"$var1"}`)))
+	require.NoError(t, c.ExpectResponseBodyCallback(func(received []byte) error {
 		return c.JSONComparer.FailMismatch([]byte(`{"bar":"foo"}`), received)
 	}))
-	assert.Error(t, c.ExpectResponseBodyCallback(func(received []byte) error {
+	require.Error(t, c.ExpectResponseBodyCallback(func(received []byte) error {
 		return c.JSONComparer.FailMismatch([]byte(`{"bar":"foo2"}`), received)
 	}))
-	assert.NoError(t, c.ExpectResponseHeader("Content-Type", "application/json"))
-	assert.NoError(t, c.ExpectOtherResponsesStatus(http.StatusConflict))
-	assert.NoError(t, c.ExpectOtherResponsesBody([]byte(`{"error":"conflict"}`)))
-	assert.NoError(t, c.ExpectOtherResponsesBodyCallback(func(received []byte) error {
+	require.NoError(t, c.ExpectResponseHeader("Content-Type", "application/json"))
+	require.NoError(t, c.ExpectOtherResponsesStatus(http.StatusConflict))
+	require.NoError(t, c.ExpectOtherResponsesBody([]byte(`{"error":"conflict"}`)))
+	require.NoError(t, c.ExpectOtherResponsesBodyCallback(func(received []byte) error {
 		return c.JSONComparer.FailMismatch([]byte(`{"error":"conflict"}`), received)
 	}))
-	assert.Error(t, c.ExpectOtherResponsesBodyCallback(func(received []byte) error {
+	require.Error(t, c.ExpectOtherResponsesBodyCallback(func(received []byte) error {
 		return c.JSONComparer.FailMismatch([]byte(`{"error":"conflict2"}`), received)
 	}))
-	assert.NoError(t, c.ExpectOtherResponsesHeader("Content-Type", "application/json"))
-	assert.NoError(t, c.CheckUnexpectedOtherResponses())
-	assert.EqualError(t, c.ExpectNoOtherResponses(), "unexpected response status, expected: 202 (Accepted), received: 409 (Conflict)")
+	require.NoError(t, c.ExpectOtherResponsesHeader("Content-Type", "application/json"))
+	require.NoError(t, c.CheckUnexpectedOtherResponses())
+	require.EqualError(t, c.ExpectNoOtherResponses(), "unexpected response status, expected: 202 (Accepted), received: 409 (Conflict)")
 
 	val, found := vars.Get("$var1")
 	assert.True(t, found)
@@ -117,7 +120,7 @@ func TestNewClient_failedExpectation(t *testing.T) {
 	}
 
 	c.WithURI("/")
-	assert.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
+	require.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
 		"unexpected body, expected: \"{\\\"foo\\\":\\\"bar}\\\"\", received: \"{\\\"bar\\\":\\\"foo\\\"}\"")
 }
 
@@ -147,8 +150,8 @@ func TestNewClient_followRedirects(t *testing.T) {
 
 	c.WithURI("/one")
 
-	assert.NoError(t, c.ExpectResponseStatus(http.StatusOK))
-	assert.NoError(t, c.ExpectResponseBody([]byte(`{"bar":"foo"}`)))
+	require.NoError(t, c.ExpectResponseStatus(http.StatusOK))
+	require.NoError(t, c.ExpectResponseBody([]byte(`{"bar":"foo"}`)))
 }
 
 func TestNewClient_context(t *testing.T) {
@@ -193,7 +196,7 @@ func TestNewClient_formData(t *testing.T) {
 	c.WithURLEncodedFormDataParam("foo", "baz")
 	c.WithURLEncodedFormDataParam("qux", "quux")
 
-	assert.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
+	require.EqualError(t, c.ExpectResponseBody([]byte(`{"foo":"bar}"`)),
 		"unexpected body, expected: \"{\\\"foo\\\":\\\"bar}\\\"\", received: \"{\\\"bar\\\":\\\"foo\\\"}\"")
 }
 
@@ -285,6 +288,6 @@ func TestClient_AllowRetries(t *testing.T) {
 		return time.Millisecond
 	}))
 
-	assert.NoError(t, c.ExpectResponseStatus(http.StatusOK))
+	require.NoError(t, c.ExpectResponseStatus(http.StatusOK))
 	assert.Equal(t, 5, tries)
 }
