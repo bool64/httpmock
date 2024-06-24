@@ -352,7 +352,7 @@ func TestServer_ExpectAsync(t *testing.T) {
 
 		for i := 0; i < 50; i++ {
 			req, err := http.NewRequest(http.MethodGet, url+"/async2", nil)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
 			resp, err := http.DefaultTransport.RoundTrip(req)
 			assert.NoError(t, err)

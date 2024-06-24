@@ -107,7 +107,7 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestNewClient_failedExpectation(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, err := writer.Write([]byte(`{"bar":"foo"}`))
 		assert.NoError(t, err)
 	}))
@@ -155,7 +155,7 @@ func TestNewClient_followRedirects(t *testing.T) {
 }
 
 func TestNewClient_context(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, err := writer.Write([]byte(`{"bar":"foo"}`))
 		assert.NoError(t, err)
 	}))
@@ -258,7 +258,7 @@ func TestClient_Fork(t *testing.T) {
 func TestClient_AllowRetries(t *testing.T) {
 	tries := 0
 
-	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		tries++
 
 		if tries == 5 {

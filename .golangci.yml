@@ -22,6 +22,7 @@ linters-settings:
 linters:
   enable-all: true
   disable:
+    - err113
     - lll
     - gochecknoglobals
     - gomnd
@@ -40,6 +41,9 @@ linters:
     - dupword
     - depguard
     - tagalign
+    - execinquery
+    - mnd
+    - testifylint
 
 issues:
   exclude-use-default: false
