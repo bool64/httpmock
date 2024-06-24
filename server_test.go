@@ -119,14 +119,14 @@ func TestServer_ServeHTTP(t *testing.T) {
 	assertRoundTrip(t, baseURL, exp1)
 
 	// Expectations were not met yet.
-	assert.EqualError(t, mock.ExpectationsWereMet(),
+	require.EqualError(t, mock.ExpectationsWereMet(),
 		"there are remaining expectations that were not met: POST /test?test=test")
 
 	// Sending second request.
 	assertRoundTrip(t, baseURL, exp2)
 
 	// Expectations were met.
-	assert.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// Requesting mock without expectations fails.
 	assertRoundTrip(t, baseURL, httpmock.Expectation{
@@ -244,15 +244,15 @@ func TestServer_ServeHTTP_concurrency(t *testing.T) {
 
 			// Sending request with wrong header.
 			req, err := http.NewRequest(http.MethodGet, url+"/test?test=test", nil)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			req.Header.Set("X-Foo", "space")
 
 			resp, err := http.DefaultTransport.RoundTrip(req)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
 			respBody, err := ioutil.ReadAll(resp.Body)
-			require.NoError(t, resp.Body.Close())
-			require.NoError(t, err)
+			assert.NoError(t, resp.Body.Close())
+			assert.NoError(t, err)
 
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			assert.Equal(t, `body`, string(respBody))
@@ -260,7 +260,7 @@ func TestServer_ServeHTTP_concurrency(t *testing.T) {
 	}
 
 	wg.Wait()
-	assert.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestServer_ResetExpectations(t *testing.T) {
@@ -280,9 +280,9 @@ func TestServer_ResetExpectations(t *testing.T) {
 		ResponseBody: []byte("body"),
 	})
 
-	assert.Error(t, mock.ExpectationsWereMet())
+	require.Error(t, mock.ExpectationsWereMet())
 	mock.ResetExpectations()
-	assert.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestServer_vars(t *testing.T) {
@@ -335,15 +335,15 @@ func TestServer_ExpectAsync(t *testing.T) {
 		defer wg.Done()
 
 		req, err := http.NewRequest(http.MethodGet, url+"/async1", nil)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		resp, err := http.DefaultTransport.RoundTrip(req)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		body, err := ioutil.ReadAll(resp.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
-		require.NoError(t, resp.Body.Close())
+		assert.NoError(t, resp.Body.Close())
 		assert.Equal(t, `{"bar":"async1"}`, string(body))
 	}()
 
@@ -352,15 +352,15 @@ func TestServer_ExpectAsync(t *testing.T) {
 
 		for i := 0; i < 50; i++ {
 			req, err := http.NewRequest(http.MethodGet, url+"/async2", nil)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
 			resp, err := http.DefaultTransport.RoundTrip(req)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
 			body, err := ioutil.ReadAll(resp.Body)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
-			require.NoError(t, resp.Body.Close())
+			assert.NoError(t, resp.Body.Close())
 			assert.Equal(t, `{"bar":"async2"}`, string(body))
 		}
 	}()
@@ -378,5 +378,5 @@ func TestServer_ExpectAsync(t *testing.T) {
 	assert.Equal(t, `{"bar":"foo"}`, string(body))
 
 	wg.Wait()
-	assert.NoError(t, sm.ExpectationsWereMet())
+	require.NoError(t, sm.ExpectationsWereMet())
 }
