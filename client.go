@@ -499,7 +499,7 @@ func (r *readSeekNopCloser) Close() error {
 	return nil
 }
 
-func (c *Client) buildBody() io.ReadSeekCloser {
+func (c *Client) buildBody() io.Reader {
 	if len(c.reqBody) > 0 {
 		return &readSeekNopCloser{ReadSeeker: bytes.NewReader(c.reqBody)}
 	}
