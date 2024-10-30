@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/bool64/dev v0.2.36
 	github.com/bool64/shared v0.1.5
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.8.2
 	github.com/swaggest/assertjson v1.9.0
 )
 
