@@ -36,7 +36,6 @@ linters:
     - ireturn
     - exhaustruct
     - nonamedreturns
-    - structcheck
     - testableexamples
     - dupword
     - depguard
@@ -51,21 +50,23 @@ issues:
     - linters:
         - staticcheck
       path: ".go"
-      text: "\"io/ioutil\" has been deprecated since Go 1.16" # Keeping backwards compatibility with go1.13.
+      text: "\"io/ioutil\" has been deprecated since" # Keeping backwards compatibility with go1.13.
     - linters:
         - gomnd
+        - mnd
         - goconst
-        - goerr113
         - noctx
         - funlen
         - dupl
         - structcheck
         - unused
         - unparam
-        - nosnakecase
       path: "_test.go"
     - linters:
         - errcheck # Error checking omitted for brevity.
         - gosec
       path: "example_"
+    - linters:
+        - revive
+      text: "unused-parameter: parameter"
 
