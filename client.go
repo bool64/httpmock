@@ -37,8 +37,12 @@ type Client struct {
 
 	ctx context.Context //nolint:containedctx // Context is configured separately.
 
+	req      *http.Request
 	resp     *http.Response
 	respBody []byte
+
+	attempt     int
+	retryDelays []time.Duration
 
 	reqHeaders        map[string]string
 	reqCookies        map[string]string
@@ -114,6 +118,38 @@ func NewClient(baseURL string) *Client {
 	return c
 }
 
+// HTTPValue contains information about request and response.
+type HTTPValue struct {
+	Req     *http.Request
+	ReqBody []byte
+
+	Resp     *http.Response
+	RespBody []byte
+
+	OtherResp     *http.Response
+	OtherRespBody []byte
+
+	Attempt     int
+	RetryDelays []time.Duration
+}
+
+// Details returns HTTP request and response information of last run.
+func (c *Client) Details() HTTPValue {
+	return HTTPValue{
+		Req:     c.req,
+		ReqBody: c.reqBody,
+
+		Resp:     c.resp,
+		RespBody: c.respBody,
+
+		OtherResp:     c.otherResp,
+		OtherRespBody: c.otherRespBody,
+
+		Attempt:     c.attempt,
+		RetryDelays: c.retryDelays,
+	}
+}
+
 // SetBaseURL changes baseURL configured with constructor.
 func (c *Client) SetBaseURL(baseURL string) {
 	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
@@ -132,6 +168,8 @@ func (c *Client) Reset() *Client {
 	c.reqQueryParams = map[string][]string{}
 	c.reqFormDataParams = map[string][]string{}
 
+	c.req = nil
+
 	c.resp = nil
 	c.respBody = nil
 
@@ -147,6 +185,9 @@ func (c *Client) Reset() *Client {
 	c.otherRespBody = nil
 	c.otherRespExpected = false
 
+	c.attempt = 0
+	c.retryDelays = nil
+
 	return c
 }
 
@@ -158,7 +199,7 @@ func (c *Client) Reset() *Client {
 // This method enables context-driven concurrent access to shared base Client.
 func (c *Client) Fork(ctx context.Context) (context.Context, *Client) {
 	// Pointer to current Client is used as context key
-	// to enable multiple different clients in sam context.
+	// to enable multiple different clients in same context.
 	if fc, ok := ctx.Value(c).(*Client); ok {
 		return ctx, fc
 	}
@@ -261,7 +302,9 @@ func (c *Client) WithURLEncodedFormDataParam(name, value string) *Client {
 	return c
 }
 
-func (c *Client) do() (err error) {
+func (c *Client) do() (err error) { //nolint:funlen
+	c.attempt++
+
 	if c.reqConcurrency < 1 {
 		c.reqConcurrency = 1
 	}
@@ -289,7 +332,7 @@ func (c *Client) do() (err error) {
 				wg.Done()
 			}()
 
-			resp, er := c.doOnce()
+			req, resp, er := c.doOnce()
 			if er != nil {
 				return
 			}
@@ -305,6 +348,10 @@ func (c *Client) do() (err error) {
 			}
 
 			mu.Lock()
+			if c.req == nil {
+				c.req = req
+			}
+
 			if _, ok := statusCodeCount[resp.StatusCode]; !ok {
 				resps[resp.StatusCode] = resp
 				bodies[resp.StatusCode] = body
@@ -315,6 +362,7 @@ func (c *Client) do() (err error) {
 			mu.Unlock()
 		}()
 	}
+
 	wg.Wait()
 
 	if err != nil {
@@ -327,6 +375,14 @@ func (c *Client) do() (err error) {
 func (c *Client) expectResp(check func() error) (err error) {
 	if c.resp != nil {
 		return check()
+	}
+
+	if len(c.reqBody) == 0 && len(c.reqFormDataParams) > 0 {
+		c.reqBody = []byte(c.reqFormDataParams.Encode())
+
+		if c.reqMethod == "" {
+			c.reqMethod = http.MethodPost
+		}
 	}
 
 	if c.retryBackOff != nil {
@@ -342,6 +398,8 @@ func (c *Client) expectResp(check func() error) (err error) {
 			if dur == -1 {
 				return err
 			}
+
+			c.retryDelays = append(c.retryDelays, dur)
 
 			time.Sleep(dur)
 		}
@@ -433,15 +491,17 @@ func (c *Client) buildURI() (string, error) {
 	return uri, nil
 }
 
+type readSeekNopCloser struct {
+	io.ReadSeeker
+}
+
+func (r *readSeekNopCloser) Close() error {
+	return nil
+}
+
 func (c *Client) buildBody() io.Reader {
 	if len(c.reqBody) > 0 {
-		return bytes.NewBuffer(c.reqBody)
-	} else if len(c.reqFormDataParams) > 0 {
-		if c.reqMethod == "" {
-			c.reqMethod = http.MethodPost
-		}
-
-		return strings.NewReader(c.reqFormDataParams.Encode())
+		return &readSeekNopCloser{ReadSeeker: bytes.NewReader(c.reqBody)}
 	}
 
 	return nil
@@ -486,17 +546,17 @@ func (c *Client) applyCookies(req *http.Request) {
 	}
 }
 
-func (c *Client) doOnce() (*http.Response, error) {
+func (c *Client) doOnce() (*http.Request, *http.Response, error) {
 	uri, err := c.buildURI()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	body := c.buildBody()
 
 	req, err := http.NewRequestWithContext(c.ctx, c.reqMethod, uri, body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	c.applyHeaders(req)
@@ -513,10 +573,14 @@ func (c *Client) doOnce() (*http.Response, error) {
 		cl.Transport = tr
 		cl.Jar = j
 
-		return cl.Do(req)
+		resp, err := cl.Do(req)
+
+		return req, resp, err
 	}
 
-	return tr.RoundTrip(req)
+	resp, err := tr.RoundTrip(req)
+
+	return req, resp, err
 }
 
 // ExpectResponseStatus sets expected response status code.

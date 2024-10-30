@@ -104,6 +104,17 @@ func TestNewClient(t *testing.T) {
 	val, found := vars.Get("$var1")
 	assert.True(t, found)
 	assert.Equal(t, "abc", val)
+
+	details := c.Details()
+	assert.NotNil(t, details.Req)
+	assert.NotNil(t, details.Resp)
+	assert.NotNil(t, details.OtherResp)
+
+	assert.Equal(t, http.StatusAccepted, details.Resp.StatusCode)
+	assert.Equal(t, http.StatusConflict, details.OtherResp.StatusCode)
+
+	assert.Equal(t, 1, details.Attempt)
+	assert.Empty(t, details.RetryDelays)
 }
 
 func TestNewClient_failedExpectation(t *testing.T) {
