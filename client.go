@@ -41,8 +41,9 @@ type Client struct {
 	resp     *http.Response
 	respBody []byte
 
-	attempt     int
-	retryDelays []time.Duration
+	alreadyRequested bool
+	attempt          int
+	retryDelays      []time.Duration
 
 	reqHeaders        map[string]string
 	reqCookies        map[string]string
@@ -129,8 +130,9 @@ type HTTPValue struct {
 	OtherResp     *http.Response
 	OtherRespBody []byte
 
-	Attempt     int
-	RetryDelays []time.Duration
+	AlreadyRequested bool
+	Attempt          int
+	RetryDelays      []time.Duration
 }
 
 // Details returns HTTP request and response information of last run.
@@ -145,8 +147,9 @@ func (c *Client) Details() HTTPValue {
 		OtherResp:     c.otherResp,
 		OtherRespBody: c.otherRespBody,
 
-		Attempt:     c.attempt,
-		RetryDelays: c.retryDelays,
+		AlreadyRequested: c.alreadyRequested,
+		Attempt:          c.attempt,
+		RetryDelays:      c.retryDelays,
 	}
 }
 
@@ -185,6 +188,7 @@ func (c *Client) Reset() *Client {
 	c.otherRespBody = nil
 	c.otherRespExpected = false
 
+	c.alreadyRequested = false
 	c.attempt = 0
 	c.retryDelays = nil
 
@@ -374,6 +378,8 @@ func (c *Client) do() (err error) { //nolint:funlen
 
 func (c *Client) expectResp(check func() error) (err error) {
 	if c.resp != nil {
+		c.alreadyRequested = true
+
 		return check()
 	}
 
